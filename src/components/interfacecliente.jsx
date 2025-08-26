@@ -6,7 +6,7 @@ import { CartContext } from '../contexts/CartContext';
 import { menuItems } from '../data/menuItems';
 import Header from './Header';
 import Footer from './Footer';
-import WelcomeModal from './WelcomeModal';
+import WelcomeModal from './welcomemodal';
 import CarouselCategories from './CarouselCategories';
 import Checkout from './Checkout';
 import { db } from '../firebase';
