@@ -3,7 +3,7 @@ const nextConfig = {
   images: {
     domains: [
       'images.unsplash.com',
-      'firebasestorage.googleapis.com'
+      'firebasestorage.googleapis.com',
     ],
     remotePatterns: [
       {
@@ -14,7 +14,7 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
-        pathname: '/v0/b/chale-da-praia.firebasestorage.app/o/**',
+        pathname: '/v0/b/chale-da-praia.appspot.com/o/**', // ✅ corrigido
       },
     ],
   },

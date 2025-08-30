@@ -52,16 +52,6 @@ const AdminLogin = ({ onLoginSuccess, language = 'pt' }) => {
     checkAdminExists();
   }, []);
 
-  // Monitorar estado de autenticação
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user && onLoginSuccess) {
-        onLoginSuccess();
-      }
-    });
-
-    return () => unsubscribe();
-  }, [onLoginSuccess]);
 
 const handleLogin = async (e) => {
   e.preventDefault();
@@ -72,10 +62,11 @@ const handleLogin = async (e) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     setSuccess('Login realizado com sucesso!');
     
-    // Chama a função de sucesso passando o usuário autenticado
-    if (onLoginSuccess) {
-      onLoginSuccess(userCredential.user);
-    }
+    // Redirecionar para /admin após login bem-sucedido
+    setTimeout(() => {
+      window.location.href = '/admin';
+    }, 1000);
+    
   } catch (error) {
     console.error("Erro no login:", error);
     setError(getErrorMessage(error.code));
@@ -84,48 +75,57 @@ const handleLogin = async (e) => {
   }
 };
 
-  const handleCreatePassword = async (e) => {
-    e.preventDefault();
-    setError('');
+const handleCreatePassword = async (e) => {
+  e.preventDefault();
+  setError('');
+  
+  if (password !== confirmPassword) {
+    setError('As palavras-passe não coincidem');
+    return;
+  }
+  
+  if (password.length < 6) {
+    setError('A palavra-passe deve ter pelo menos 6 caracteres');
+    return;
+  }
+  
+  setLoading(true);
+  
+  try {
+    // Criar usuário no Firebase Auth
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     
-    if (password !== confirmPassword) {
-      setError('As palavras-passe não coincidem');
-      return;
-    }
+    // Salvar informações do admin no Realtime Database
+    const adminRef = ref(db, 'admin');
+    await set(adminRef, {
+      email: email,
+      createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString()
+    });
     
-    if (password.length < 6) {
-      setError('A palavra-passe deve ter pelo menos 6 caracteres');
-      return;
-    }
+    // Também criar registro do usuário na tabela users com role de admin
+    const userRef = ref(db, `users/${userCredential.user.uid}`);
+    await set(userRef, {
+      email: email,
+      role: 'admin',
+      name: 'Administrador',
+      createdAt: new Date().toISOString()
+    });
     
-    setLoading(true);
+    setSuccess('Conta de administrador criada com sucesso!');
     
-    try {
-      // Criar usuário no Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
-      // Salvar informações do admin no Realtime Database
-      const adminRef = ref(db, 'admin');
-      await set(adminRef, {
-        email: email,
-        createdAt: new Date().toISOString(),
-        lastLogin: new Date().toISOString()
-      });
-      
-      setSuccess('Conta de administrador criada com sucesso!');
-      // Chama a função de sucesso passando o usuário autenticado
-      if (onLoginSuccess) {
-        onLoginSuccess(userCredential.user);
-      }
-      setIsCreatingPassword(false);
-      setAdminExists(true);
-    } catch (error) {
-      console.error("Erro ao criar conta:", error);
-      setError(getErrorMessage(error.code));
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Redirecionar para /admin após 1 segundo
+    setTimeout(() => {
+      window.location.href = '/admin';
+    }, 1000);
+    
+  } catch (error) {
+    console.error("Erro ao criar conta:", error);
+    setError(getErrorMessage(error.code));
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handlePasswordReset = async (e) => {
     e.preventDefault();

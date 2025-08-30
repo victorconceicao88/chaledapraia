@@ -41,56 +41,54 @@ const AdminPanel = ({ language }) => {
   const [loadingAuth, setLoadingAuth] = useState(true);
 
 // CORREÇÃO: Adicionar verificação completa de admin
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // Buscar dados do usuário no banco
-        const userRef = ref(db, `users/${firebaseUser.uid}`);
-        onValue(userRef, (snapshot) => {
-          const userData = snapshot.val();
-          if (userData && userData.role === 'admin') {
-            setUser({ ...userData, id: firebaseUser.uid, email: firebaseUser.email });
-            localStorage.setItem('adminUser', JSON.stringify({
-              id: firebaseUser.uid,
-              email: firebaseUser.email,
-              role: userData.role,
-              name: userData.name
-            }));
-          } else {
-            // Não é admin - redirecionar
-            handleLogout();
-          }
-          setLoadingAuth(false);
-        }, { onlyOnce: true });
-      } else {
-        // Não está logado - redirecionar
-        handleLogout();
-      }
-    });
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    if (firebaseUser) {
+      // Buscar dados do usuário no banco
+      const userRef = ref(db, `users/${firebaseUser.uid}`);
+      onValue(userRef, (snapshot) => {
+        const userData = snapshot.val();
+        if (userData && userData.role === 'admin') {
+          setUser({ ...userData, id: firebaseUser.uid, email: firebaseUser.email });
+          localStorage.setItem('adminUser', JSON.stringify({
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: userData.role,
+            name: userData.name
+          }));
+        } else {
+          // Não é admin - apenas fazer logout sem redirecionar
+          signOut(auth);
+          localStorage.removeItem('adminUser');
+          setUser(null);
+        }
+        setLoadingAuth(false);
+      }, { onlyOnce: true });
+    } else {
+      // Não está logado - apenas definir estado
+      setUser(null);
+      setLoadingAuth(false);
+      localStorage.removeItem('adminUser');
+    }
+  });
 
-    return () => unsubscribe();
-  }, []);
+  return () => unsubscribe();
+}, []);
 
   // Função de logout COMPLETA
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setUser(null);
-      // Limpar TODOS os dados de sessão
-      localStorage.removeItem('user');
-      localStorage.removeItem('adminUser');
-      sessionStorage.clear();
-      
-      // Redirecionar para página inicial com força total
-      window.location.href = '/';
-      window.location.reload(); // Força recarregamento completo
-    } catch (error) {
-      console.error('Erro ao fazer logout:', error);
-      // Fallback: redirecionar mesmo com erro
-      window.location.href = '/';
-    }
-  };
-
+const handleLogout = async () => {
+  try {
+    await signOut(auth);
+    setUser(null);
+    // Limpar dados de sessão
+    localStorage.removeItem('user');
+    localStorage.removeItem('adminUser');
+    
+    // Não redirecionar aqui - deixe o useEffect acima lidar com o estado
+  } catch (error) {
+    console.error('Erro ao fazer logout:', error);
+  }
+};
   // Carregar categorias do banco de dados
   const carregarCategorias = async () => {
     try {
@@ -1019,19 +1017,18 @@ const AdminPanel = ({ language }) => {
   }, [user, ultimoPedidoId, abaAtiva]);
 
   // Se ainda está carregando a autenticação
-  if (loadingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#4ba7b1]"></div>
-      </div>
-    );
-  }
+if (loadingAuth) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#4ba7b1]"></div>
+    </div>
+  );
+}
 
-  // Se não está autenticado como admin, não mostra nada (já redirecionou)
-  if (!user) {
-    return null;
-  }
-
+// Se não está autenticado como admin, mostrar formulário de login
+if (!user) {
+  return <AdminLogin onLoginSuccess={(userData) => setUser(userData)} />;
+}
 
   const pedidosFiltrados = filtrarPedidos();
 
@@ -1099,12 +1096,17 @@ const AdminPanel = ({ language }) => {
             {pedidos.filter(p => !p.status || p.status === 'pendente').length} pendentes
           </span>
         </div>
+       <button
+          onClick={() => window.location.href = '/'}
+          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mr-3"
+        >
+          <FiHome className="mr-2 h-4 w-4" />
+          Página Principal
+        </button>
+        
+        {/* Botão existente de Sair */}
         <button
-          onClick={() => {
-            signOut(auth);
-            localStorage.removeItem('user');
-            window.location.href = '/';
-          }}
+          onClick={handleLogout}
           className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
         >
           <FiLogOut className="mr-2 h-4 w-4" />
