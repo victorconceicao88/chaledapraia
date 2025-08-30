@@ -1,8 +1,10 @@
 "use client";
-import { useEffect, useState, useRef } from 'react';
-import { db, storage } from '../firebase';
+import { useEffect, useState, useRef} from 'react';
+import { db, storage, auth } from '../firebase';
 import { ref, onValue, update } from 'firebase/database';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import AdminLogin from './AdminLogin';
 import { 
   FiTruck, FiHome, FiClock, FiCheckCircle, 
   FiXCircle, FiUser, FiPhone, FiMapPin,
@@ -10,7 +12,7 @@ import {
   FiImage, FiUpload, FiTrash2, FiArrowLeft,
   FiAlertCircle, FiInfo, FiShoppingBag, FiBell,
   FiPrinter, FiBluetooth, FiCoffee, FiMeh,
-  FiFolder, FiGrid, FiSettings
+  FiFolder, FiGrid, FiSettings, FiLogOut
 } from 'react-icons/fi';
 import { FaMobileAlt, FaCcVisa } from 'react-icons/fa';
 
@@ -35,68 +37,59 @@ const AdminPanel = ({ language }) => {
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(null);
   const [uploadingCategoryImage, setUploadingCategoryImage] = useState(false);
   const notificationRef = useRef(null);
+  const [user, setUser] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
 
+// CORREÇÃO: Adicionar verificação completa de admin
   useEffect(() => {
-    const pedidosRef = ref(db, 'orders');
-    const unsubscribe = onValue(pedidosRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const arrayPedidos = Object.entries(data).map(([key, value]) => ({
-          id: key,
-          ...value
-        }));
-        
-        // Ordena por data (mais recente primeiro)
-        const pedidosOrdenados = arrayPedidos.sort((a, b) => 
-          new Date(b.createdAt) - new Date(a.createdAt)
-        );
-        
-        setPedidos(pedidosOrdenados);
-        
-        // Verifica se há novos pedidos pendentes
-        const pedidosPendentes = pedidosOrdenados.filter(p => !p.status || p.status === 'pendente');
-        
-        if (pedidosPendentes.length > 0) {
-          const maisRecente = pedidosPendentes[0];
-          
-          // Se for um pedido novo e ainda não visualizado
-          if (ultimoPedidoId !== maisRecente.id) {
-            setUltimoPedidoId(maisRecente.id);
-            
-            // Conta quantos pedidos novos existem desde o último visto
-            const novosPedidos = !ultimoPedidoId 
-              ? pedidosPendentes 
-              : pedidosPendentes.filter(p => new Date(p.createdAt) > new Date(pedidos.find(ped => ped.id === ultimoPedidoId)?.createdAt));
-            
-            setNovosPedidosCount(novosPedidos.length);
-            
-            // Mostra notificação apenas se não estiver na aba de pendentes
-            if (abaAtiva !== 'pendentes' && novosPedidos.length > 0) {
-              setNovoPedidoAlerta(true);
-              setShowNotification(true);
-              
-              // Esconde a notificação após 15 segundos se não interagir
-              const timeout = setTimeout(() => {
-                setShowNotification(false);
-              }, 15000);
-              
-              return () => clearTimeout(timeout);
-            }
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // Buscar dados do usuário no banco
+        const userRef = ref(db, `users/${firebaseUser.uid}`);
+        onValue(userRef, (snapshot) => {
+          const userData = snapshot.val();
+          if (userData && userData.role === 'admin') {
+            setUser({ ...userData, id: firebaseUser.uid, email: firebaseUser.email });
+            localStorage.setItem('adminUser', JSON.stringify({
+              id: firebaseUser.uid,
+              email: firebaseUser.email,
+              role: userData.role,
+              name: userData.name
+            }));
+          } else {
+            // Não é admin - redirecionar
+            handleLogout();
           }
-        } else {
-          setNovosPedidosCount(0);
-        }
+          setLoadingAuth(false);
+        }, { onlyOnce: true });
+      } else {
+        // Não está logado - redirecionar
+        handleLogout();
       }
     });
 
-    carregarImagemEvento();
-    carregarCategorias();
-    
-    // Tentar reconectar à impressora ao carregar a página
-    reconectarImpressoraSalva();
-    
     return () => unsubscribe();
-  }, [ultimoPedidoId, abaAtiva]);
+  }, []);
+
+  // Função de logout COMPLETA
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      // Limpar TODOS os dados de sessão
+      localStorage.removeItem('user');
+      localStorage.removeItem('adminUser');
+      sessionStorage.clear();
+      
+      // Redirecionar para página inicial com força total
+      window.location.href = '/';
+      window.location.reload(); // Força recarregamento completo
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+      // Fallback: redirecionar mesmo com erro
+      window.location.href = '/';
+    }
+  };
 
   // Carregar categorias do banco de dados
   const carregarCategorias = async () => {
@@ -507,7 +500,7 @@ const AdminPanel = ({ language }) => {
             c.properties.write || c.properties.writeWithoutResponse
           );
           
-          if (writeCharacteristics.length > 0) {
+        if (writeCharacteristics.length > 0) {
             characteristic = writeCharacteristics[0];
             console.log('Característica de escrita encontrada:', characteristic.uuid);
             break;
@@ -963,6 +956,83 @@ const AdminPanel = ({ language }) => {
     return limparCaracteresEspeciais(texto);
   };
 
+  // Efeito principal para carregar pedidos, imagem de evento e categorias
+  useEffect(() => {
+    if (!user) return;
+
+    const pedidosRef = ref(db, 'orders');
+    let timeout;
+
+    const unsubscribe = onValue(pedidosRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const arrayPedidos = Object.entries(data).map(([key, value]) => ({
+          id: key,
+          ...value
+        }));
+
+        const pedidosOrdenados = arrayPedidos.sort((a, b) => 
+          new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+        setPedidos(pedidosOrdenados);
+
+        const pedidosPendentes = pedidosOrdenados.filter(p => !p.status || p.status === 'pendente');
+
+        if (pedidosPendentes.length > 0) {
+          const maisRecente = pedidosPendentes[0];
+
+          if (ultimoPedidoId !== maisRecente.id) {
+            setUltimoPedidoId(maisRecente.id);
+
+            const novosPedidos = !ultimoPedidoId 
+              ? pedidosPendentes 
+              : pedidosPendentes.filter(p => 
+                  new Date(p.createdAt) > new Date(pedidos.find(ped => ped.id === ultimoPedidoId)?.createdAt)
+                );
+
+            setNovosPedidosCount(novosPedidos.length);
+
+            if (abaAtiva !== 'pendentes' && novosPedidos.length > 0) {
+              setNovoPedidoAlerta(true);
+              setShowNotification(true);
+
+              timeout = setTimeout(() => {
+                setShowNotification(false);
+              }, 15000);
+            }
+          }
+        } else {
+          setNovosPedidosCount(0);
+        }
+      }
+    });
+
+    carregarImagemEvento();
+    carregarCategorias();
+    reconectarImpressoraSalva();
+
+    return () => {
+      unsubscribe();
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [user, ultimoPedidoId, abaAtiva]);
+
+  // Se ainda está carregando a autenticação
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#4ba7b1]"></div>
+      </div>
+    );
+  }
+
+  // Se não está autenticado como admin, não mostra nada (já redirecionou)
+  if (!user) {
+    return null;
+  }
+
+
   const pedidosFiltrados = filtrarPedidos();
 
   return (
@@ -1005,35 +1075,45 @@ const AdminPanel = ({ language }) => {
         </div>
       )}
 
-      {/* Cabeçalho premium */}
-      <header className="bg-gradient-to-r from-indigo-600 to-indigo-800 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center">
-                <FiShoppingBag className="mr-3 hidden md:block" />
-                Painel Administrativo
-                {novoPedidoAlerta && (
-                  <span className="ml-3 relative inline-flex">
-                    <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                  </span>
-                )}
-              </h1>
-              <p className="mt-1 text-indigo-100 text-sm md:text-base">
-                Gerencie pedidos e promoções do seu estabelecimento
-              </p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="hidden md:flex items-center px-3 py-1 bg-indigo-500 bg-opacity-30 rounded-full">
-                <span className="text-white text-sm font-medium">
-                  {pedidos.filter(p => !p.status || p.status === 'pendente').length} pendentes
-                </span>
-              </div>
-            </div>
-          </div>
+     <header className="bg-gradient-to-r from-indigo-600 to-indigo-800 shadow-lg">
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className="flex items-center justify-between">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center">
+          <FiShoppingBag className="mr-3 hidden md:block" />
+          Painel Administrativo
+          {novoPedidoAlerta && (
+            <span className="ml-3 relative inline-flex">
+              <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+          )}
+        </h1>
+        <p className="mt-1 text-indigo-100 text-sm md:text-base">
+          Gerencie pedidos e promoções do seu estabelecimento
+        </p>
+      </div>
+      <div className="flex items-center space-x-4">
+        <div className="hidden md:flex items-center px-3 py-1 bg-indigo-500 bg-opacity-30 rounded-full">
+          <span className="text-white text-sm font-medium">
+            {pedidos.filter(p => !p.status || p.status === 'pendente').length} pendentes
+          </span>
         </div>
-      </header>
+        <button
+          onClick={() => {
+            signOut(auth);
+            localStorage.removeItem('user');
+            window.location.href = '/';
+          }}
+          className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+        >
+          <FiLogOut className="mr-2 h-4 w-4" />
+          Sair
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
 
       {/* Conteúdo Principal */}
       <main className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-6">
@@ -1672,7 +1752,7 @@ const AdminPanel = ({ language }) => {
                 Gerenciamento de Promoção
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Atualize a imagem promocional exibida no site e aplicativo
+                Atualize a imagem promocional exibida no site and aplicativo
               </p>
             </div>
 

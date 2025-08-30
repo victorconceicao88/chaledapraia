@@ -11,9 +11,13 @@ import CarouselCategories from './CarouselCategories';
 import Checkout from './Checkout';
 import { db } from '../firebase';
 import { ref, push, set, onValue, query, orderByChild, equalTo, update } from 'firebase/database';
-import { getAuth, sendPasswordResetEmail, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signOut,sendPasswordResetEmail, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+import { useRouter } from "next/router";
+
 
 const auth = getAuth();
+
+
 
 // Modal para seleção de opções de carne
 const MeatOptionsModal = ({ isOpen, onClose, onConfirm, language }) => {
@@ -993,8 +997,15 @@ const InterfaceCliente = ({ language = {}, languageCode = 'pt' }) => {
   const [showAuthRequired, setShowAuthRequired] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showAccountCreated, setShowAccountCreated] = useState(false);
+  const [shouldRedirectToAdmin, setShouldRedirectToAdmin] = useState(false);
+  const [currentLanguage, setCurrentLanguage] = useState(language);
+  const [currentLanguageCode, setCurrentLanguageCode] = useState(languageCode);
+  
+  
+// Remova completamente a linha do useRouter
+ 
 
-  // Carregar imagens das categorias do Firebase
+// Carregar imagens das categorias do Firebase
   useEffect(() => {
     const categoriasRef = ref(db, 'categories');
     const unsubscribe = onValue(categoriasRef, (snapshot) => {
@@ -1012,19 +1023,23 @@ const InterfaceCliente = ({ language = {}, languageCode = 'pt' }) => {
   }, []);
 
   // Verificar se usuário está logado ao carregar
-  useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      try {
-        const userData = JSON.parse(savedUser);
+useEffect(() => {
+  const savedUser = localStorage.getItem('user');
+  if (savedUser) {
+    try {
+      const userData = JSON.parse(savedUser);
+      // Verificar se não é admin para evitar conflito
+      if (userData.role !== 'admin') {
         setUser(userData);
         loadUserOrders(userData.email);
-      } catch (e) {
-        console.error('Erro ao carregar usuário:', e);
-        localStorage.removeItem('user');
       }
+    } catch (e) {
+      localStorage.removeItem('user');
     }
-  }, []);
+  }
+}, []);
+
+  
 
   // Carregar pedidos do usuário
   const loadUserOrders = (userEmail) => {
@@ -1045,8 +1060,7 @@ const InterfaceCliente = ({ language = {}, languageCode = 'pt' }) => {
       }
     });
   };
-
-  // Funções de autenticação
+// Substitua o useEffect inteiro por:
 const handleLogin = async (email, password) => {
   setIsLoading(true);
   setAuthError('');
@@ -1054,7 +1068,6 @@ const handleLogin = async (email, password) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // Buscar dados adicionais do usuário no Realtime Database
     const userRef = ref(db, `users/${user.uid}`);
     onValue(userRef, (snapshot) => {
       const userData = snapshot.val();
@@ -1063,6 +1076,11 @@ const handleLogin = async (email, password) => {
         setUser(completeUser);
         localStorage.setItem('user', JSON.stringify(completeUser));
         loadUserOrders(user.email);
+        
+        // Só redireciona se for admin explícito
+        if (userData.role === 'admin') {
+          window.location.href = '/admin';
+        }
       }
     }, { onlyOnce: true });
     
@@ -1074,6 +1092,7 @@ const handleLogin = async (email, password) => {
   }
 };
 
+  
 useEffect(() => {
   import('firebase/auth').then(({ getAuth, onAuthStateChanged }) => {
     const auth = getAuth();
@@ -1118,26 +1137,39 @@ const handleRegister = async (userData) => {
     const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
     const user = userCredential.user;
     
-    // Salvar dados adicionais no Realtime Database
+    // Verificar se é o admin e adicionar role de administrador
+    const isAdmin = userData.email === 'sustentaveleprospero@gmail.com';
+    
+    // Salvar dados adicionais no Realtime Database INCLUINDO O EMAIL
     const userRef = ref(db, `users/${user.uid}`);
     await set(userRef, {
       name: userData.name,
+      email: userData.email, // ADICIONAR ESTA LINHA
       phone: userData.phone,
       address: userData.address,
       postalCode: userData.postalCode,
       city: userData.city,
+      role: isAdmin ? 'admin' : 'customer',
       createdAt: new Date().toISOString()
     });
     
     const newUser = {
       id: user.uid,
       email: user.email,
+      role: isAdmin ? 'admin' : 'customer',
       ...userData
     };
     
     setUser(newUser);
     localStorage.setItem('user', JSON.stringify(newUser));
-    setShowAccountCreated(true);
+    
+    // Se for admin, redirecionar para painel administrativo
+    if (isAdmin) {
+      window.location.href = '/admin';
+    } else {
+      setShowAccountCreated(true);
+    }
+    
     loadUserOrders(user.email);
   } catch (error) {
     setAuthError(getAuthErrorMessage(error.code));
@@ -1145,7 +1177,6 @@ const handleRegister = async (userData) => {
     setIsLoading(false);
   }
 };
-
   const handleUpdateProfile = async (profileData) => {
     try {
       if (!user || !user.id) return;
@@ -1176,11 +1207,20 @@ const handleRegister = async (userData) => {
     }
   };
 
-  const handleLogout = () => {
+// No handleLogout da InterfaceCliente, adicione:
+const handleLogout = () => {
+  signOut(auth).then(() => {
     setUser(null);
     setUserOrders([]);
     localStorage.removeItem('user');
-  };
+    window.location.reload();
+  }).catch((error) => {
+    console.error('Erro no logout:', error);
+    setUser(null);
+    localStorage.removeItem('user');
+    window.location.reload();
+  });
+};
 
   const handleForgotPassword = () => {
     setShowAuthModal(false);
@@ -1383,7 +1423,12 @@ const handleRegister = async (userData) => {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header 
-        language={language} 
+        language={currentLanguage} 
+        setLanguage={(lang) => {
+          setCurrentLanguageCode(lang);
+          // Aqui você pode adicionar a lógica para carregar as traduções
+          // para o idioma selecionado
+        }} // ← ADICIONE ESTA LINHA
         onCartClick={() => {
           if (cart.length === 0) return;
           setShowCheckout(true);
@@ -1409,7 +1454,7 @@ const handleRegister = async (userData) => {
           setShowUserProfile(true);
         }}
       />
-      
+            
       <main className="flex-grow w-full mx-auto px-0 pb-20 md:pb-24 mt-20">
         {showCheckout && (
           <Checkout 

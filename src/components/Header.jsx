@@ -1,10 +1,20 @@
 "use client";
 import { useState, useContext, useEffect, useRef } from 'react';
 import Image from 'next/image';
-import { FiUser, FiGlobe, FiChevronDown, FiShoppingCart, FiLogOut, FiClock, FiEdit } from 'react-icons/fi';
+import { FiUser, FiGlobe, FiChevronDown, FiShoppingCart, FiLogOut, FiClock, FiEdit,FiLogIn, FiUserPlus  } from 'react-icons/fi';
 import { CartContext } from '../contexts/CartContext';
 
-const Header = ({ language = 'pt', setLanguage, onCartClick, user, onLoginClick, onLogoutClick, onHistoryClick, onProfileClick }) => {
+
+const Header = ({ 
+  language = 'pt', 
+  setLanguage = () => {}, 
+  onCartClick = () => {}, 
+  user = null, 
+  onLoginClick = () => {}, 
+  onLogoutClick = () => {}, 
+  onHistoryClick = () => {}, 
+  onProfileClick = () => {} 
+}) => {
   const { totalItems = 0 } = useContext(CartContext) || {};
   const [isLanguageOpen, setIsLanguageOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -104,50 +114,62 @@ const Header = ({ language = 'pt', setLanguage, onCartClick, user, onLoginClick,
                 <FiUser className="text-gray-600 text-lg" />
                 {user && (
                   <span className="ml-1 text-xs text-gray-600 hidden sm:block">
-                    Olá, {user.name.split(' ')[0]}
+                    Olá, {user.name?.split(' ')[0]}
                   </span>
                 )}
               </button>
 
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-md z-50 py-1">
-                  {user ? (
-                    <>
-                      <div className="px-4 py-2 text-sm text-gray-500 border-b border-gray-100">
-                        Logado como <span className="font-medium text-[#2f4a55]">{user.name}</span>
-                      </div>
-                      <button
-                        onClick={onProfileClick}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
-                      >
-                        <FiEdit className="mr-2" size={14} />
-                        Meu Perfil
-                      </button>
-                      <button
-                        onClick={onHistoryClick}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
-                      >
-                        <FiClock className="mr-2" size={14} />
-                        Histórico de Pedidos
-                      </button>
-                      <button
-                        onClick={onLogoutClick}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center text-red-600"
-                      >
-                        <FiLogOut className="mr-2" size={14} />
-                        Sair
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={onLoginClick}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-[#2f4a55] font-medium"
-                    >
-                      Fazer Login / Cadastrar
-                    </button>
-                  )}
-                </div>
-              )}
+  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-md z-50 py-1">
+    {user ? (
+      <>
+        <div className="px-4 py-2 text-sm text-gray-500 border-b border-gray-100">
+          Logado como <span className="font-medium text-[#2f4a55]">{user.name}</span>
+        </div>
+        <button
+          onClick={() => {
+            onProfileClick();
+            setIsUserMenuOpen(false);
+          }}
+          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
+        >
+          <FiEdit className="mr-2" size={14} />
+          Meu Perfil
+        </button>
+        <button
+          onClick={() => {
+            onHistoryClick();
+            setIsUserMenuOpen(false);
+          }}
+          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center"
+        >
+          <FiClock className="mr-2" size={14} />
+          Histórico de Pedidos
+        </button>
+        <button
+          onClick={() => {
+            onLogoutClick();
+            setIsUserMenuOpen(false);
+          }}
+          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center text-red-600"
+        >
+          <FiLogOut className="mr-2" size={14} />
+          Sair
+        </button>
+      </>
+    ) : (
+      <button
+        onClick={() => {
+          onLoginClick();
+          setIsUserMenuOpen(false);
+        }}
+        className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-[#2f4a55] font-medium"
+      >
+        Fazer Login / Cadastrar
+      </button>
+    )}
+  </div>
+)}
             </div>
 
             {/* CARRINHO */}
