@@ -53,14 +53,6 @@ const Header = ({
 
           {/* LOGO + NOME */}
           <div className="flex items-center space-x-3">
-            <Image
-              src="/logo.png"
-              alt="Logo Chalé da Praia"
-              width={40}
-              height={40}
-              className="object-contain"
-              priority
-            />
             <div className="block sm:block">
               <h1 className="text-xl sm:text-3xl font-signature text-[#2f4a55] leading-none">Chalé da Praia</h1>
               <p className="text-xs font-brewery text-[#4ba7b1] uppercase tracking-widest leading-none">BEACH BAR</p>
